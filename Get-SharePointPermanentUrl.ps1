@@ -55,10 +55,11 @@ function Get-SharePointPermanentUrl {
         # This function requires the correct server-relative path of the file.
         # We must ensure $ServerRelativeUrl is URL-encoded for the REST API call, but PnP generally handles simple paths.
         
-        # We use a literal path for the REST endpoint construction
-        $FileApiEndpoint = "/_api/web/GetFileByServerRelativeUrl('${ServerRelativeUrl}')/ListItemAllFields"
+        # We use a literal path for the REST endpoint construction, including $select for efficiency.
+        # FIX: Removed -Select parameter and added it to the URL using $select query parameter.
+        $FileApiEndpoint = "/_api/web/GetFileByServerRelativeUrl('${ServerRelativeUrl}')/ListItemAllFields?`$select=FileRef,DlcDocId,DlcDocIdUrl"
         
-        $ItemData = Invoke-PnPSPRestMethod -Url $FileApiEndpoint -Method Get -Select "FileRef, DlcDocId, DlcDocIdUrl" -ErrorAction Stop
+        $ItemData = Invoke-PnPSPRestMethod -Url $FileApiEndpoint -Method Get -ErrorAction Stop
         
         # Check if Document ID exists
         $DocumentID = $ItemData.DlcDocId
@@ -146,7 +147,7 @@ try {
         Write-Host "Attempting to connect to SharePoint Online site: $SiteUrlGuess using Interactive Authentication (Device Code)." -ForegroundColor Green
         Write-Host "Please follow the instructions below to sign in via your web browser (a code and URL should appear):" -ForegroundColor Green
         
-        # *** FIX APPLIED HERE: Reverted to -Interactive to support older modules. ***
+        # Reverting to -Interactive to support older modules.
         Connect-PnPOnline -Url $SiteUrlGuess -Interactive -ClientID $PnPClientID -ErrorAction Stop
         Write-Host "Successfully connected to $SiteUrlGuess using Interactive flow." -ForegroundColor Green
     } else {
