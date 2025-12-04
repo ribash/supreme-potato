@@ -67,7 +67,7 @@ function Get-SharePointPermanentUrl {
         if (-not $DocumentID) {
             Write-Warning "Document ID (DlcDocId) not found for this document. Ensure the Document ID Service feature is active on the site collection, or ensure the provided URL is the *canonical* path (e.g., .../Library/Document.docx) and not an encoded sharing link, as PnP may fail to resolve the correct server path."
             return
-        }
+            }
 
         # 4. Extract and Format the Permanent URL
         # The DlcDocIdUrl field often contains the permanent URL in the format:
