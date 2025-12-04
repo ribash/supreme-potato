@@ -112,8 +112,8 @@ if (-not $DocumentUrl) {
 try {
     # Extract the site URL for connection (this is a heuristic and might need adjustment for complex paths)
     $Uri = New-Object System.Uri($DocumentUrl)
-    $Host = "$($Uri.Scheme)://$($Uri.Host)"
-    $SiteUrlGuess = $Host
+    $TenantHost = "$($Uri.Scheme)://$($Uri.Host)"
+    $SiteUrlGuess = $TenantHost
 
     # Check for Modern Sharing Link format (/:x:/s/SITE_NAME/...)
     if ($DocumentUrl -match "(^https?://[^/]+)/:x:/s/([^/]+)") {
