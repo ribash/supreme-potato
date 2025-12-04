@@ -27,6 +27,9 @@ you MUST use a custom Entra ID App Registration created within your tenant. Foll
 
 3. Update Script: Copy the Application (Client) ID from the app's Overview page and replace the value of 
    $CustomClientID below with your new ID.
+
+Example Manual Connection Command:
+Connect-PnPOnline -Url https://ribash.sharepoint.com/s/RIBASH-ICF-BEIS -Interactive -ClientID e8b2afe3-e580-4e46-8b24-ded9c8a99042
 #>
 param(
     [Parameter(Mandatory=$true)]
