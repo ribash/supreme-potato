@@ -136,12 +136,13 @@ try {
     # Check if a connection already exists to avoid unnecessary prompts
     if (-not (Get-PnPConnection -ErrorAction SilentlyContinue)) {
         
-        Write-Host "Attempting to connect to SharePoint Online site: $SiteUrlGuess using Device Code Authentication." -ForegroundColor Green
-        Write-Host "Please follow the instructions that appear shortly to sign in." -ForegroundColor Green
+        Write-Host "Attempting to connect to SharePoint Online site: $SiteUrlGuess using Web Browser Authentication." -ForegroundColor Green
+        Write-Host "A browser window should open shortly. Please complete the sign-in there." -ForegroundColor Green
         
-        # Use DeviceAuth to bypass Client ID issues. This will print a code to the console.
-        Connect-PnPOnline -Url $SiteUrlGuess -DeviceAuth -ErrorAction Stop
-        Write-Host "Successfully connected to $SiteUrlGuess using Device Code flow." -ForegroundColor Green
+        # *** FIX APPLIED HERE: Switched to -UseWebLogin ***
+        # This forces a browser pop-up for authentication, which is often permitted when DeviceAuth fails.
+        Connect-PnPOnline -Url $SiteUrlGuess -UseWebLogin -ErrorAction Stop
+        Write-Host "Successfully connected to $SiteUrlGuess using Web Browser flow." -ForegroundColor Green
     } else {
         # If a connection exists, just use it, but warn the user if it's a different site
         $CurrentConnectionUrl = (Get-PnPConnection).Url
