@@ -125,7 +125,7 @@ function Get-SharePointPermanentUrl {
 # If you receive the "App is not allowed..." error, you MUST create your own Entra ID App Registration
 # and update the Client ID below with the Application (Client) ID from your custom registration.
 # The default ID below is the blocked PnP ID.
-$CustomClientID = "1950a258-227b-4e31-a9cf-717495945fc2" 
+$CustomClientID = "e8b2afe3-e580-4e46-8b24-ded9c8a99042" 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 # 1. Check for PnP Module (optional but helpful)
