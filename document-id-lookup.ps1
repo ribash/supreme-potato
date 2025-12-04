@@ -140,12 +140,12 @@ try {
     
     if (-not $ExistingConnection) {
         
-        Write-Host "Attempting to connect to SharePoint Online site: $SiteUrlGuess using Web Browser Authentication." -ForegroundColor Green
-        Write-Host "A browser window should open shortly. Please complete the sign-in there." -ForegroundColor Green
+        Write-Host "Attempting to connect to SharePoint Online site: $SiteUrlGuess using Device Code Authentication." -ForegroundColor Green
+        Write-Host "Please follow the instructions below to sign in via your web browser:" -ForegroundColor Green
         
-        # Use -UseWebLogin to open a browser window for authentication
-        Connect-PnPOnline -Url $SiteUrlGuess -UseWebLogin -ErrorAction Stop
-        Write-Host "Successfully connected to $SiteUrlGuess using Web Browser flow." -ForegroundColor Green
+        # *** FIX APPLIED HERE: Reverted to DeviceAuth, best cross-platform method ***
+        Connect-PnPOnline -Url $SiteUrlGuess -DeviceAuth -ErrorAction Stop
+        Write-Host "Successfully connected to $SiteUrlGuess using Device Code flow." -ForegroundColor Green
     } else {
         # If a connection exists, check if it's the right tenant.
         $CurrentConnectionUrl = $ExistingConnection.Url
@@ -170,6 +170,6 @@ try {
     Write-Error "Please verify the following actions to resolve this issue:"
     Write-Error "1. **Check Session State:** Run the command 'Disconnect-PnPOnline' and then re-run this script to ensure a fresh authentication attempt."
     Write-Error "2. **Review Permissions:** Verify you have access to the site '$SiteUrlGuess'."
-    Write-Error "3. **Check URL Format:** Ensure the document link is correct."
+    Write-Error "3. **Corporate Policy Check:** If this fails with a 'Client ID' error, your organization's security policy is blocking the PnP application ID."
     Write-Error "Original PowerShell Error: $($_.Exception.Message)"
 }
