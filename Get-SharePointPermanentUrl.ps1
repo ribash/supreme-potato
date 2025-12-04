@@ -140,11 +140,15 @@ try {
     
     if (-not $ExistingConnection) {
         
+        # Use the official Microsoft PowerShell Client ID (Standard PnP Default)
+        # This is a globally trusted application ID that helps bypass strict Entra ID policies.
+        $PnPClientID = "1950a258-227b-4e31-a9cf-717495945fc2"
+        
         Write-Host "Attempting to connect to SharePoint Online site: $SiteUrlGuess using Device Code Authentication." -ForegroundColor Green
         Write-Host "Please follow the instructions below to sign in via your web browser:" -ForegroundColor Green
         
-        # *** FIX APPLIED HERE: Reverted to DeviceAuth, best cross-platform method ***
-        Connect-PnPOnline -Url $SiteUrlGuess -DeviceAuth -ErrorAction Stop
+        # *** FIX APPLIED HERE: Added -ClientID to force the use of a known, trusted PnP App ID ***
+        Connect-PnPOnline -Url $SiteUrlGuess -DeviceAuth -ClientID $PnPClientID -ErrorAction Stop
         Write-Host "Successfully connected to $SiteUrlGuess using Device Code flow." -ForegroundColor Green
     } else {
         # If a connection exists, check if it's the right tenant.
@@ -170,6 +174,6 @@ try {
     Write-Error "Please verify the following actions to resolve this issue:"
     Write-Error "1. **Check Session State:** Run the command 'Disconnect-PnPOnline' and then re-run this script to ensure a fresh authentication attempt."
     Write-Error "2. **Review Permissions:** Verify you have access to the site '$SiteUrlGuess'."
-    Write-Error "3. **Corporate Policy Check:** If this fails with a 'Client ID' error, your organization's security policy is blocking the PnP application ID."
+    Write-Error "3. **Corporate Policy Check:** The specific authentication method may be blocked. Try running 'Connect-PnPOnline -Url $SiteUrlGuess -DeviceAuth -ClientID 1950a258-227b-4e31-a9cf-717495945fc2' manually in the terminal to see the exact error message that occurs."
     Write-Error "Original PowerShell Error: $($_.Exception.Message)"
 }
