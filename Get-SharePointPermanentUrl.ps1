@@ -141,15 +141,14 @@ try {
     if (-not $ExistingConnection) {
         
         # Use the official Microsoft PowerShell Client ID (Standard PnP Default)
-        # This is a globally trusted application ID that helps bypass strict Entra ID policies.
         $PnPClientID = "1950a258-227b-4e31-a9cf-717495945fc2"
         
-        Write-Host "Attempting to connect to SharePoint Online site: $SiteUrlGuess using Device Code Authentication." -ForegroundColor Green
-        Write-Host "Please follow the instructions below to sign in via your web browser:" -ForegroundColor Green
+        Write-Host "Attempting to connect to SharePoint Online site: $SiteUrlGuess using Interactive Authentication (Device Code)." -ForegroundColor Green
+        Write-Host "Please follow the instructions below to sign in via your web browser (a code and URL should appear):" -ForegroundColor Green
         
-        # *** FIX APPLIED HERE: Added -ClientID to force the use of a known, trusted PnP App ID ***
-        Connect-PnPOnline -Url $SiteUrlGuess -DeviceAuth -ClientID $PnPClientID -ErrorAction Stop
-        Write-Host "Successfully connected to $SiteUrlGuess using Device Code flow." -ForegroundColor Green
+        # *** FIX APPLIED HERE: Reverted to -Interactive to support older modules. ***
+        Connect-PnPOnline -Url $SiteUrlGuess -Interactive -ClientID $PnPClientID -ErrorAction Stop
+        Write-Host "Successfully connected to $SiteUrlGuess using Interactive flow." -ForegroundColor Green
     } else {
         # If a connection exists, check if it's the right tenant.
         $CurrentConnectionUrl = $ExistingConnection.Url
@@ -172,8 +171,8 @@ try {
     Write-Error "CONNECTION FAILURE: Failed to establish a SharePoint session."
     Write-Error "The script attempted to connect to '$SiteUrlGuess'."
     Write-Error "Please verify the following actions to resolve this issue:"
-    Write-Error "1. **Check Session State:** Run the command 'Disconnect-PnPOnline' and then re-run this script to ensure a fresh authentication attempt."
-    Write-Error "2. **Review Permissions:** Verify you have access to the site '$SiteUrlGuess'."
-    Write-Error "3. **Corporate Policy Check:** The specific authentication method may be blocked. Try running 'Connect-PnPOnline -Url $SiteUrlGuess -DeviceAuth -ClientID 1950a258-227b-4e31-a9cf-717495945fc2' manually in the terminal to see the exact error message that occurs."
+    Write-Error "1. **Update PnP.PowerShell:** Run 'Update-Module PnP.PowerShell' and try again. This is likely a module version issue."
+    Write-Error "2. **Check Session State:** Run the command 'Disconnect-PnPOnline' and then re-run this script to ensure a fresh authentication attempt."
+    Write-Error "3. **Review Permissions:** Verify you have access to the site '$SiteUrlGuess'."
     Write-Error "Original PowerShell Error: $($_.Exception.Message)"
 }
