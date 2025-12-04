@@ -33,33 +33,35 @@ function Get-SharePointPermanentUrl {
     Write-Host "Tenant URL found: $TenantBaseUrl"
     Write-Host "Relative Path: $ServerRelativeUrl"
 
-    # The Document ID feature is site-collection specific, so we need the site's path for connection.
     # The Document ID is stored on the document's list item.
+    # The SiteUrl extraction logic is handled in the main execution block for connection.
     $SiteUrl = $Url.Split("/Shared Documents")[0]
     if (-not $SiteUrl.Contains("/sites/")) {
-        # Fallback for root sites
         $SiteUrl = $TenantBaseUrl
     }
     
-    # 2. Connect to the SharePoint Site
+    # 2. Check for Active Connection
+    # We rely on the connection established in the main execution block.
     try {
-        # Ensure you are logged in before running this script: Connect-PnPOnline -Url $SiteUrl -Interactive
-        # This function assumes a connection has already been established by the user.
         $Connection = Get-PnPConnection -ErrorAction Stop
-        if (-not ($Connection.Url -eq $SiteUrl)) {
-            Write-Host "Warning: Current PnP connection is to '$($Connection.Url)', but document is on '$SiteUrl'." -ForegroundColor Red
-            Write-Host "Attempting to connect to the document's site..." -ForegroundColor Red
-            Connect-PnPOnline -Url $SiteUrl -Interactive -ErrorAction Stop
+        if (-not $Connection) {
+            Write-Error "Connection is missing. Ensure Connect-PnPOnline was executed successfully."
+            return
+        }
+        # Check if the existing connection matches the site of the document (optional but good practice)
+        if ($Connection.Url -ne $SiteUrl) {
+             Write-Host "Note: Current PnP connection is to '$($Connection.Url)', but document is on '$SiteUrl'." -ForegroundColor Yellow
         }
     }
     catch {
-        Write-Error "Could not verify PnP connection. Please run 'Connect-PnPOnline -Url <SiteUrl> -Interactive' before executing this script."
+        Write-Error "Could not verify PnP connection. $($_.Exception.Message)"
         return
     }
 
     # 3. Retrieve the Document ID metadata
     try {
         # Use GetFileByServerRelativeUrl and select properties from the ListItemAllFields
+        # Note: The ServerRelativeUrl already contains the site path if it's not the root site.
         $FileApiEndpoint = "/_api/web/GetFileByServerRelativeUrl('${ServerRelativeUrl}')/ListItemAllFields"
         
         $ItemData = Invoke-PnPSPRestMethod -Url $FileApiEndpoint -Method Get -Select "FileRef, DlcDocId, DlcDocIdUrl" -ErrorAction Stop
@@ -76,7 +78,7 @@ function Get-SharePointPermanentUrl {
         # 4. Extract and Format the Permanent URL
         # The DlcDocIdUrl field often contains the permanent URL in the format:
         # "https://tenant.sharepoint.com/sites/mysite/_layouts/15/DocIdRedir.aspx?ID=DOC-1234567890-1, DOC-1234567890-1"
-        # We need to clean this up.
+        # We clean this up by taking the first element of the split.
 
         $PermanentUrl = $DocumentIDUrl.Split(',')[0].Trim()
         
@@ -111,9 +113,7 @@ if (-not $DocumentUrl) {
     }
 }
 
-# 3. Connect to SharePoint (You will be prompted to sign in)
-# The script will try to connect to the site where the document resides.
-Write-Host "Connecting to SharePoint Online..." -ForegroundColor Green
+# 3. Determine the Site URL for connection
 try {
     # Extract the site URL for connection (this is a heuristic and might need adjustment for complex paths)
     $SiteUrlGuess = $DocumentUrl.Split("/Shared Documents")[0] 
@@ -126,17 +126,35 @@ try {
             $SiteUrlGuess = "$($Uri.Scheme)://$($Uri.Host)"
         }
     }
+} catch {
+    Write-Error "Could not parse the site URL from the provided document URL. Please check the format."
+    exit
+}
 
-    # Attempt to connect; user must authenticate
-    Connect-PnPOnline -Url $SiteUrlGuess -Interactive -ErrorAction Stop
-    Write-Host "Successfully connected to $SiteUrlGuess" -ForegroundColor Green
+# 4. Connect to SharePoint (This is where the pre-authentication happens)
+try {
+    # Check if a connection already exists to avoid unnecessary prompts
+    if (-not (Get-PnPConnection -ErrorAction SilentlyContinue)) {
+        
+        Write-Host "Attempting to connect to SharePoint Online site: $SiteUrlGuess using Device Code Authentication." -ForegroundColor Green
+        Write-Host "Please follow the instructions that appear shortly to sign in." -ForegroundColor Green
+        
+        # Use DeviceAuth to bypass Client ID issues. This will print a code to the console.
+        Connect-PnPOnline -Url $SiteUrlGuess -DeviceAuth -ErrorAction Stop
+        Write-Host "Successfully connected to $SiteUrlGuess using Device Code flow." -ForegroundColor Green
+    } else {
+        # If a connection exists, just use it, but warn the user if it's a different site
+        $CurrentConnectionUrl = (Get-PnPConnection).Url
+        if ($CurrentConnectionUrl -ne $SiteUrlGuess) {
+            Write-Host "A connection to $CurrentConnectionUrl already exists. Using this connection." -ForegroundColor Yellow
+            Write-Host "If the script fails, try disconnecting with 'Disconnect-PnPOnline' and running again." -ForegroundColor Yellow
+        }
+    }
     
-    # 4. Call the function to get the permanent URL
+    # 5. Call the function to get the permanent URL
     Get-SharePointPermanentUrl -Url $DocumentUrl -TenantBaseUrl $TenantUrl
 
 } catch {
     Write-Error "Failed to connect to SharePoint Online. Check the URL and ensure you have permissions. $($_.Exception.Message)"
-} finally {
-    # Disconnect after running
-    Disconnect-PnPOnline
-}
+} 
+# Removed the Disconnect-PnPOnline from the finally block to keep the session open for debugging/re-runs.
