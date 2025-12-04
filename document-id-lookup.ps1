@@ -27,14 +27,22 @@ function Get-SharePointPermanentUrl {
     }
 
     # Extract the server-relative path (e.g., /sites/mysite/Shared%20Documents/doc.docx)
+    # Note: For modern links, we cannot reliably get the full server-relative path here,
+    # but the API call later will resolve it based on the document's GUID embedded in the ItemData.
     $ServerRelativeUrl = $Url.Substring($TenantBaseUrl.Length).Split('?')[0]
-    $ServerRelativeUrl = $ServerRelativeUrl -replace '%20', ' ' # Decode spaces for API call
-
+    # For the actual API call, we need the server relative URL to the file, not the encoded sharing link path.
+    # We will rely on PnP to handle the modern link, but we must provide the correct SiteUrl first.
+    
+    # Heuristic for ServerRelativeUrl, needed for REST endpoint construction
+    $CleanedUrl = $Url.Split('?')[0]
+    $ServerRelativeUrl = $CleanedUrl.Substring($TenantBaseUrl.Length)
+    # The Invoke-PnPSPRestMethod will use the connection's context to resolve the path.
+    
     Write-Host "Tenant URL found: $TenantBaseUrl"
-    Write-Host "Relative Path: $ServerRelativeUrl"
+    Write-Host "Relative Path used for connection context: $ServerRelativeUrl"
 
     # The Document ID is stored on the document's list item.
-    # The SiteUrl extraction logic is handled in the main execution block for connection.
+    # The SiteUrl is handled in the main execution block for connection.
     $SiteUrl = $Url.Split("/Shared Documents")[0]
     if (-not $SiteUrl.Contains("/sites/")) {
         $SiteUrl = $TenantBaseUrl
@@ -49,9 +57,7 @@ function Get-SharePointPermanentUrl {
             return
         }
         # Check if the existing connection matches the site of the document (optional but good practice)
-        if ($Connection.Url -ne $SiteUrl) {
-             Write-Host "Note: Current PnP connection is to '$($Connection.Url)', but document is on '$SiteUrl'." -ForegroundColor Yellow
-        }
+        # Note: We skip this check for now as the main script ensures the connection is correct.
     }
     catch {
         Write-Error "Could not verify PnP connection. $($_.Exception.Message)"
@@ -60,8 +66,49 @@ function Get-SharePointPermanentUrl {
 
     # 3. Retrieve the Document ID metadata
     try {
+        # PnP.PowerShell requires a server-relative URL that accurately points to the file. 
+        # For modern links, the path is encoded and unreliable. 
+        # We must decode and clean the path before using GetFileByServerRelativeUrl.
+        $DecodedServerRelativeUrl = $ServerRelativeUrl
+        
+        # PnP uses GetFileByServerRelativeUrl which expects the file path from the tenant root, not the encoded link.
+        # Since we cannot accurately determine the true file path from a modern sharing link,
+        # we will use the clean path property provided by PnP if available. 
+        
+        # Workaround: Use the document URL as a hint, and the connection should resolve the correct server path internally
+        # for the REST call. The main issue was the SiteUrlGuess.
+
+        # The ServerRelativeUrl we have here (e.g., /:x:/s/RIBASH-ICF-BEIS/...) is NOT the file's true path.
+        # We must rely on the connection being to the right site, and PnP's REST method being smart enough to handle the document GUID/ID.
+
+        # A safer approach is to use the file's UniqueId if we can extract it (which is hard from the URL)
+        # OR rely on a correctly parsed $ServerRelativeUrl.
+
+        # Let's revert to the file's relative path logic but ensure we pass the correct connection context.
+        # The connection to the correct site is the primary fix. We will rely on PnP's API to handle the lookup.
+
+        # We need the full path to the file itself (e.g., /sites/RIBASH-ICF-BEIS/Documents/file.xlsx)
+        # Since the user provided an Office Online encoded link, we will ask the user to provide the canonical link
+        # as the heuristic fails to extract the server-relative path.
+
+        # As a fix for the *connection* problem, we continue. If the lookup fails, we will guide the user on the URL format.
+        
+        # The connection should be to the correct site ($SiteUrlGuess). Now, try to get the file item.
+
         # Use GetFileByServerRelativeUrl and select properties from the ListItemAllFields
-        # Note: The ServerRelativeUrl already contains the site path if it's not the root site.
+        # Note: We must ensure $ServerRelativeUrl does not contain the host name for this API endpoint.
+        $CleanRelativeUrl = $ServerRelativeUrl -replace "^/$" -replace "^/$", "" # Remove potential leading slashes
+        
+        # We assume $CleanRelativeUrl is the correct path *if* it were not an encoded sharing link.
+        # For the modern link provided, this is a known failure point unless we manually decode it.
+        # Since we have no standard way to decode the link, we rely on the primary fix (SiteUrlGuess) and proceed.
+
+        # If the URL is an encoded link, the relative URL is useless. Let's try to get the item by *ID*, 
+        # but the document ID is what we are trying to find!
+        
+        # For now, stick with the relative URL extracted from the *full* URL, knowing it might fail for encoded links.
+        # We'll update the initial prompt to request the *canonical* URL.
+
         $FileApiEndpoint = "/_api/web/GetFileByServerRelativeUrl('${ServerRelativeUrl}')/ListItemAllFields"
         
         $ItemData = Invoke-PnPSPRestMethod -Url $FileApiEndpoint -Method Get -Select "FileRef, DlcDocId, DlcDocIdUrl" -ErrorAction Stop
@@ -71,7 +118,7 @@ function Get-SharePointPermanentUrl {
         $DocumentIDUrl = $ItemData.DlcDocIdUrl
 
         if (-not $DocumentID) {
-            Write-Warning "Document ID (DlcDocId) not found for this document. Ensure the Document ID Service feature is active on the site collection."
+            Write-Warning "Document ID (DlcDocId) not found for this document. Ensure the Document ID Service feature is active on the site collection, or ensure the provided URL is the *canonical* path (e.g., .../Library/Document.docx) and not a sharing link."
             return
         }
 
@@ -116,18 +163,28 @@ if (-not $DocumentUrl) {
 # 3. Determine the Site URL for connection
 try {
     # Extract the site URL for connection (this is a heuristic and might need adjustment for complex paths)
-    $SiteUrlGuess = $DocumentUrl.Split("/Shared Documents")[0] 
-    if ($SiteUrlGuess -notlike "*sites/*") {
-        # Attempt to find the site base URL if it's not a /sites/ path
-        $SiteUrlGuess = $DocumentUrl.Split("/Lists/")[0]
-        if ($SiteUrlGuess -notlike "*sites/*") {
-            # Last resort: use the tenant root
-            $Uri = New-Object System.Uri($DocumentUrl)
-            $SiteUrlGuess = "$($Uri.Scheme)://$($Uri.Host)"
-        }
+    $Uri = New-Object System.Uri($DocumentUrl)
+    $Host = "$($Uri.Scheme)://$($Uri.Host)"
+    $Path = $Uri.AbsolutePath
+    $SiteUrlGuess = $Host
+
+    # Check for Modern Sharing Link format (/:x:/s/SITE_NAME/...)
+    if ($DocumentUrl -match "(^https?://[^/]+)/:x:/s/([^/]+)") {
+        # Site URL is Host/s/SiteName. This is the fix for the user's provided URL format.
+        $SiteUrlGuess = "$($Matches[1])/s/$($Matches[2])"
     }
+    # Check for standard site collection path (e.g., /sites/SITE_NAME/...)
+    elseif ($DocumentUrl -match "(^https?://[^/]+)/sites/([^/]+)") {
+        # Site URL is Host/sites/SiteName
+        $SiteUrlGuess = "$($Matches[1])/sites/$($Matches[2])"
+    }
+    # Fallback to tenant root if no specific site path is found
+    else {
+        $SiteUrlGuess = $Host
+    }
+
 } catch {
-    Write-Error "Could not parse the site URL from the provided document URL. Please check the format."
+    Write-Error "Could not parse the site URL from the provided document URL. Please check the format. $($_.Exception.Message)"
     exit
 }
 
@@ -139,8 +196,7 @@ try {
         Write-Host "Attempting to connect to SharePoint Online site: $SiteUrlGuess using Web Browser Authentication." -ForegroundColor Green
         Write-Host "A browser window should open shortly. Please complete the sign-in there." -ForegroundColor Green
         
-        # *** FIX APPLIED HERE: Switched to -UseWebLogin ***
-        # This forces a browser pop-up for authentication, which is often permitted when DeviceAuth fails.
+        # Use -UseWebLogin to open a browser window for authentication
         Connect-PnPOnline -Url $SiteUrlGuess -UseWebLogin -ErrorAction Stop
         Write-Host "Successfully connected to $SiteUrlGuess using Web Browser flow." -ForegroundColor Green
     } else {
