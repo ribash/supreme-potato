@@ -1,6 +1,33 @@
-# Requires the PnP.PowerShell module (Install-Module PnP.PowerShell)
-# This script takes a standard SharePoint document URL and returns the permanent Document ID URL.
+<#
+.SYNOPSIS
+Gets the permanent, location-independent URL for a SharePoint Online document using its Document ID.
 
+.DESCRIPTION
+This script connects to SharePoint Online, extracts the list item details for a given document URL 
+(handling modern sharing links heuristically), and retrieves the Document ID (DlcDocId) and its 
+corresponding permanent redirect URL (DlcDocIdUrl) via the SharePoint REST API.
+
+.NOTES
+PnP.PowerShell Module: This script requires the PnP.PowerShell module to be installed.
+Authentication: It uses Interactive login, which typically defaults to the Device Code flow on Mac/Linux 
+or opens a browser window on Windows.
+
+.ENTRA_ID_SETUP (CRITICAL for 'App is not allowed' errors)
+If you encounter an "App is not allowed to call SPO" error (meaning the public PnP Client ID is blocked), 
+you MUST use a custom Entra ID App Registration created within your tenant. Follow these steps:
+
+1. Register App: Go to the Entra ID Portal -> App registrations -> New registration.
+   - Name: PnP Document ID Lookup (or similar).
+   - Supported account types: Accounts in this organizational directory only.
+   - Redirect URI: Select 'Public client/native (mobile & desktop)' and enter 'http://localhost'.
+
+2. Configure Permissions: Go to API permissions -> Add a permission -> SharePoint -> Delegated permissions.
+   - Select: Sites.FullControl.All (or Sites.Read.All for read-only access).
+   - ACTION: An admin MUST click 'Grant admin consent for [your tenant name]'.
+
+3. Update Script: Copy the Application (Client) ID from the app's Overview page and replace the value of 
+   $CustomClientID below with your new ID.
+#>
 param(
     [Parameter(Mandatory=$true)]
     [string]$DocumentUrl,
@@ -56,7 +83,6 @@ function Get-SharePointPermanentUrl {
         # We must ensure $ServerRelativeUrl is URL-encoded for the REST API call, but PnP generally handles simple paths.
         
         # We use a literal path for the REST endpoint construction, including $select for efficiency.
-        # FIX: Removed -Select parameter and added it to the URL using $select query parameter.
         $FileApiEndpoint = "/_api/web/GetFileByServerRelativeUrl('${ServerRelativeUrl}')/ListItemAllFields?`$select=FileRef,DlcDocId,DlcDocIdUrl"
         
         $ItemData = Invoke-PnPSPRestMethod -Url $FileApiEndpoint -Method Get -ErrorAction Stop
@@ -93,6 +119,14 @@ function Get-SharePointPermanentUrl {
 }
 
 # --- Execution ---
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# *** CRITICAL FIX FOR: invalid_request / App is not allowed to call SPO ***
+# If you receive the "App is not allowed..." error, you MUST create your own Entra ID App Registration
+# and update the Client ID below with the Application (Client) ID from your custom registration.
+# The default ID below is the blocked PnP ID.
+$CustomClientID = "1950a258-227b-4e31-a9cf-717495945fc2" 
+# ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 # 1. Check for PnP Module (optional but helpful)
 if (-not (Get-Module -ListAvailable -Name "PnP.PowerShell")) {
@@ -141,14 +175,14 @@ try {
     
     if (-not $ExistingConnection) {
         
-        # Use the official Microsoft PowerShell Client ID (Standard PnP Default)
-        $PnPClientID = "1950a258-227b-4e31-a9cf-717495945fc2"
+        $ClientIDToUse = $CustomClientID
         
-        Write-Host "Attempting to connect to SharePoint Online site: $SiteUrlGuess using Interactive Authentication (Device Code)." -ForegroundColor Green
+        Write-Host "Attempting to connect to SharePoint Online site: $SiteUrlGuess using Interactive Authentication." -ForegroundColor Green
+        Write-Host "NOTE: If this fails, you MUST replace '$CustomClientID' with your custom Entra ID App ID." -ForegroundColor Red
         Write-Host "Please follow the instructions below to sign in via your web browser (a code and URL should appear):" -ForegroundColor Green
         
-        # Reverting to -Interactive to support older modules.
-        Connect-PnPOnline -Url $SiteUrlGuess -Interactive -ClientID $PnPClientID -ErrorAction Stop
+        # Use the explicit Client ID for connection
+        Connect-PnPOnline -Url $SiteUrlGuess -Interactive -ClientID $ClientIDToUse -ErrorAction Stop
         Write-Host "Successfully connected to $SiteUrlGuess using Interactive flow." -ForegroundColor Green
     } else {
         # If a connection exists, check if it's the right tenant.
@@ -172,8 +206,7 @@ try {
     Write-Error "CONNECTION FAILURE: Failed to establish a SharePoint session."
     Write-Error "The script attempted to connect to '$SiteUrlGuess'."
     Write-Error "Please verify the following actions to resolve this issue:"
-    Write-Error "1. **Update PnP.PowerShell:** Run 'Update-Module PnP.PowerShell' and try again. This is likely a module version issue."
-    Write-Error "2. **Check Session State:** Run the command 'Disconnect-PnPOnline' and then re-run this script to ensure a fresh authentication attempt."
-    Write-Error "3. **Review Permissions:** Verify you have access to the site '$SiteUrlGuess'."
+    Write-Error "1. **Check Session State:** Run the command 'Disconnect-PnPOnline' and then re-run this script to ensure a fresh authentication attempt."
+    Write-Error "2. **ENTRA ID BLOCK:** You MUST create and use a custom Entra ID Application ID to proceed."
     Write-Error "Original PowerShell Error: $($_.Exception.Message)"
 }
