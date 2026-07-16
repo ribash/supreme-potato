@@ -1,0 +1,36 @@
+# Next Gen Tech and Security Programme Board 
+# IdAM decisions 
+
+---
+Paper author:
+Sponsor: 
+
+## 1. Executive Summary
+
+1.1 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+
+
+
+## Context
+
+Google Workspace accounts and DSIT Okta accounts have the same format, but some individuals will have different prefixes in both identity providers.  Example: Jacqui Read who is jacqui.read2@dsit.gov.uk and jacqui.read1@digital.cabinet-office.gov.uk.
+
+We need to pick one of these two potentially conflicting prefixes for use in the new identity provider systems.
+
+If we use the DSIT prefix, it is easier to do things like SCIM integration for leaver detection.  Also email re-routing could be more straightforward for tools that require the UPN to be a functional email address.
+
+If we use the Google prefix, it is easier to do things like transfer an existing SSO tool from one IDP to another whilst maintaining the link to the same target account
+
+## Decision
+
+We will use the Google prefix where available and carry this over to the new IDP(s).  Where a user does not have a legacy Workspace account, we will match the DSIT prefix.
+
+## Reasoning
+
+Any integration work with Okta will be somewhat more complicated.  However, the Google prefix is available as an email alias attribute in Okta for all migrated users, and can be used to assist with accurately mapping a user for automation such as leavers detection.
+
+Migrating tools from one IDP to another, or even to a new suffix in the same IDP, will be greatly simplified if suffix manipulation is the only required change.
+
+## Consequences
+
+Integration with Okta will be somewhat more complicated.  A simple substitution of the suffix to `@dsit.gov.uk` will not result in a mapping of the username to a deliverable mailbox.
